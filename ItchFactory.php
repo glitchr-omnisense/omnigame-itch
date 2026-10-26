@@ -27,7 +27,7 @@ final class ItchFactory extends ProviderFactory
             'omnigame.factory_title' => 'itch.io',
             'omnigame.required_options' => [],
             'key' => null,
-            'user_agent' => 'omnigame/1.0 (+https://github.com/glitchr-studio/omnigame)',
+            'user_agent' => 'omnigame/1.0 (+https://github.com/glitchr-omnisense/omnigame)',
             'api' => 'https://api.itch.io',
         ]);
     }
