@@ -47,10 +47,9 @@ Requires PHP 8.2, `omnisense/omnigame` (1.x) and `symfony/http-client` (6.4, 7 o
 
 `attribution`: `Data from itch.io`.
 
-> [!WARNING]
-> Known defect: without `key`, `capabilities()` says no library and no ownership, but the provider
-> still implements both, so the registry's `library('itch')` and `ownership('itch')` return it;
-> `owns()` and `library()` then throw `InvalidConfigException` once they reach the API.
+Without `key`, `capabilities()` says no library and no ownership, and the registry's
+`library('itch')` and `ownership('itch')` refuse them (`NotSupportedException`, the core's
+`Registry`); `owns()` and `library()` called directly are an `InvalidConfigException`.
 
 ## Behaviour
 
@@ -64,13 +63,8 @@ call; a `data.json` without a title is `null`.
 | `url` | `links.self`, else `https://{creator}.itch.io/{game}` |
 | `developers` | `authors[].name` |
 | `tags` | `tags` |
-| `price` | `price` and `original_price` as shown (`$2.00`, `€4,99`): the currency from the symbol (`$` USD, `€` EUR, `£` GBP, `¥` JPY; USD when none), two decimals; the discount computed when the original is higher |
+| `price` | `price` and `original_price` as shown (`$2.00`, `€4,99`, `$1,000.00`, `¥500`): the currency from the symbol (`$` USD, `€` EUR, `£` GBP, `¥` JPY; USD when none), in ISO 4217 minor units (none for JPY, two for the others); the last `.` or `,` followed by one or two digits is the decimal separator, any other a thousands one; the discount computed when the original is higher |
 | `images` | `cover_image` (`Cover`), `screenshots` (`Screenshot`) |
-
-> [!WARNING]
-> Known defect: the price is always read with two decimals and no thousands separator: `¥500`
-> gives 50000 JPY minor units (500 expected: JPY has none), `$1,000.00` gives 100 (one dollar) -
-> seen on answers composed for the check in the core's harness, 2026-10-27.
 
 **Ownership.** A page ref is turned into the game's number from its `data.json` (an unknown page:
 `false`); a numeric ref is used as the number. The player decides the query: digits a `user_id`,
@@ -124,7 +118,8 @@ services:
 ## Verified, and not
 
 Tested offline (`Tests/ItchProviderTest.php`, in the core's harness, PHP 8.4): X-Moon's page
-recorded on 2026-10-24, an unknown page; ownership by user id and by e-mail, the key's library, a
+recorded on 2026-10-24, an unknown page, prices in minor units (yen, thousands separators, a sale,
+composed); ownership by user id and by e-mail, the key's library, a
 refused key - answers shaped after the documentation. `Tests/BareTest.php` loads every class with
 the package's requirements alone. Verified live: X-Moon's page (`Tests/LiveTest.php`, 2026-10-24;
 and on 2026-10-27). Not verified: ownership and the library (no key); how itch.io answers "no

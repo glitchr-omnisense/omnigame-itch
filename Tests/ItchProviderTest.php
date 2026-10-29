@@ -32,6 +32,30 @@ final class ItchProviderTest extends TestCase
         self::assertNull(self::provider(self::http())->game(GameRef::itch('not a page')));
     }
 
+    /**
+     * Prices in ISO 4217 minor units, whatever the writing: the yen has none (ISO 4217's exponent 0),
+     * a thousands separator is not a decimal one. Composed in the shape of a page's data.json.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('prices')]
+    public function testAPriceInMinorUnits(string $price, int $amount, string $currency, ?string $original = null, ?int $initial = null): void
+    {
+        $page = json_encode(['id' => 3, 'title' => 'X-Moon', 'price' => $price, 'authors' => [['name' => 'leafo', 'url' => 'https://leafo.itch.io']], 'links' => ['self' => 'https://leafo.itch.io/x-moon']] + (null !== $original ? ['original_price' => $original] : []));
+        $game = self::provider(RecordedHttpClient::routes(['~data\.json~' => [200, (string) $page]]))->game(GameRef::itch('leafo/x-moon'));
+
+        self::assertSame([$amount, $currency, $initial], [$game?->price?->amount, $game?->price?->currency, $game?->price?->initial]);
+    }
+
+    public static function prices(): iterable
+    {
+        yield 'yen' => ['¥500', 500, 'JPY'];
+        yield 'thousands' => ['$1,000.00', 100000, 'USD'];
+        yield 'euros' => ['€4,99', 499, 'EUR'];
+        yield 'euros and thousands' => ['€1.299,00', 129900, 'EUR'];
+        yield 'no decimals' => ['$2', 200, 'USD'];
+        yield 'pounds, thousands only' => ['£1,000', 100000, 'GBP'];
+        yield 'a sale' => ['$1.50', 150, 'USD', '$3.00', 300];
+    }
+
     public function testOwnershipByUserIdOrEmailWithTheKey(): void
     {
         $http = self::http();

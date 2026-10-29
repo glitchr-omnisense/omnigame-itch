@@ -32,6 +32,9 @@ final class ItchProvider implements ProviderInterface, CatalogueInterface, Owner
 {
     private const CURRENCIES = ['$' => 'USD', '€' => 'EUR', '£' => 'GBP', '¥' => 'JPY'];
 
+    /** ISO 4217's minor unit exponents that are not 2. */
+    private const DECIMALS = ['JPY' => 0];
+
     public function __construct(private readonly JsonClient $json, private readonly ?string $key = null, private readonly string $api = 'https://api.itch.io')
     {
     }
@@ -163,11 +166,10 @@ final class ItchProvider implements ProviderInterface, CatalogueInterface, Owner
         return preg_match('~^https?://([a-z0-9_-]+)\.itch\.io/([a-z0-9_-]+)~i', $url, $m) ? strtolower($m[1].'/'.$m[2]) : null;
     }
 
-    /** "$2.00", "€4,99": minor units and the currency; the price before a sale when given. */
+    /** "$2.00", "€4,99", "¥500", "$1,000.00": ISO 4217 minor units and the currency; the price before a sale when given. */
     private static function price(?string $price, ?string $original): ?Price
     {
-        $amount = self::amount($price);
-        if (null === $amount || null === $price) {
+        if (null === $price) {
             return null;
         }
         $currency = 'USD';
@@ -176,18 +178,36 @@ final class ItchProvider implements ProviderInterface, CatalogueInterface, Owner
                 $currency = $code;
             }
         }
-        $before = self::amount($original);
+        $decimals = self::DECIMALS[$currency] ?? 2;
+        $amount = self::amount($price, $decimals);
+        if (null === $amount) {
+            return null;
+        }
+        $before = self::amount($original, $decimals);
         $discounted = null !== $before && $before > $amount;
 
         return new Price($amount, $currency, $discounted ? $before : null, $discounted ? (int) round(100 * ($before - $amount) / $before) : 0);
     }
 
-    private static function amount(?string $value): ?int
+    /**
+     * A written amount in minor units: the last "." or "," followed by one or
+     * two digits is the decimal separator, any other is a thousands one.
+     */
+    private static function amount(?string $value, int $decimals): ?int
     {
-        if (null === $value || !preg_match('~(\d+)(?:[.,](\d{1,2}))?~', $value, $m)) {
+        if (null === $value || !preg_match('~\d[\d.,]*~', $value, $m)) {
             return null;
         }
+        $number = rtrim($m[0], '.,');
+        $fraction = '';
+        if (preg_match('~^(.*)[.,](\d{1,2})$~', $number, $parts)) {
+            [$number, $fraction] = [$parts[1], $parts[2]];
+        }
+        $units = (int) preg_replace('~\D~', '', $number);
+        if (0 === $decimals) {
+            return $units + ((int) str_pad($fraction, 2, '0') >= 50 ? 1 : 0); // a currency without minor units: rounded
+        }
 
-        return (int) $m[1] * 100 + (int) str_pad($m[2] ?? '0', 2, '0');
+        return $units * 10 ** $decimals + (int) substr(str_pad($fraction, $decimals, '0'), 0, $decimals);
     }
 }
